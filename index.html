@@ -1234,7 +1234,6 @@
                     });
                     // Apply staggered delays for form inputs within the contact section
                     if (entry.target.id === 'contact') {
-                        // Re-enabled individual input delays for contact form
                         entry.target.querySelectorAll('input, textarea, button').forEach((el, i) => {
                             el.style.setProperty('--delay', `${i * 0.1}s`);
                         });
@@ -1278,8 +1277,8 @@
             sectionObserver.observe(section);
         });
 
-        // --- Three.js Interactive Blob Background ---
-        let scene, camera, renderer, light, mesh;
+        // --- Three.js Interactive Blob and Particle Background ---
+        let scene, camera, renderer, light, blobMesh, particlesMesh;
         let mouseX = 0, mouseY = 0;
         let targetX = 0, targetY = 0;
         const windowHalfX = window.innerWidth / 2;
@@ -1301,8 +1300,8 @@
             light.position.set(5, 5, 5).normalize();
             scene.add(light);
 
-            // Create a custom shader material for the blob
-            const vertexShader = `
+            // --- Blob Mesh ---
+            const blobVertexShader = `
                 uniform float time;
                 uniform vec2 mousePos;
                 varying vec3 vNormal;
@@ -1324,7 +1323,7 @@
                 }
             `;
 
-            const fragmentShader = `
+            const blobFragmentShader = `
                 uniform float time;
                 uniform vec3 color1;
                 uniform vec3 color2;
@@ -1339,23 +1338,62 @@
                 }
             `;
 
-            const geometry = new THREE.IcosahedronGeometry(2, 32); // Smooth sphere
-            const material = new THREE.ShaderMaterial({
+            const blobGeometry = new THREE.IcosahedronGeometry(2, 32); // Smooth sphere
+            const blobMaterial = new THREE.ShaderMaterial({
                 uniforms: {
                     time: { value: 0.0 },
                     color1: { value: new THREE.Color(0x8a2be2) }, // Accent primary
                     color2: { value: new THREE.Color(0xff69b4) }, // Accent secondary
                     mousePos: { value: new THREE.Vector2(0.5, 0.5) }
                 },
-                vertexShader: vertexShader,
-                fragmentShader: fragmentShader,
+                vertexShader: blobVertexShader,
+                fragmentShader: blobFragmentShader,
                 transparent: true,
                 opacity: 0.9,
                 blending: THREE.AdditiveBlending // For a glowing effect
             });
 
-            mesh = new THREE.Mesh(geometry, material);
-            scene.add(mesh);
+            blobMesh = new THREE.Mesh(blobGeometry, blobMaterial);
+            scene.add(blobMesh);
+
+            // --- Particle System ---
+            const particlesCount = 5000;
+            const particlesGeometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particlesCount * 3);
+            const colors = new Float32Array(particlesCount * 3);
+
+            const color1 = new THREE.Color(0x8a2be2); // Primary accent
+            const color2 = new THREE.Color(0xff69b4); // Secondary accent
+
+            for (let i = 0; i < particlesCount; i++) {
+                // Position particles randomly in a larger sphere
+                positions[i * 3 + 0] = (Math.random() - 0.5) * 20;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+
+                // Assign random color mix from accent colors
+                const mixedColor = new THREE.Color();
+                mixedColor.lerpColors(color1, color2, Math.random());
+                colors[i * 3 + 0] = mixedColor.r;
+                colors[i * 3 + 1] = mixedColor.g;
+                colors[i * 3 + 2] = mixedColor.b;
+            }
+
+            particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const particlesMaterial = new THREE.PointsMaterial({
+                size: 0.05, // Size of each particle
+                sizeAttenuation: true, // Particles closer to camera appear larger
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending, // For glowing effect
+                vertexColors: true // Use colors from geometry attribute
+            });
+
+            particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+            scene.add(particlesMesh);
+
 
             camera.position.z = 5;
 
@@ -1380,16 +1418,22 @@
             targetX += (mouseX - targetX) * 0.02;
             targetY += (mouseY - targetY) * 0.02;
 
-            mesh.rotation.x += 0.001 + targetY * 0.0005;
-            mesh.rotation.y += 0.001 + targetX * 0.0005;
+            // Animate blob
+            blobMesh.rotation.x += 0.001 + targetY * 0.0005;
+            blobMesh.rotation.y += 0.001 + targetX * 0.0005;
 
-            if (mesh.material.uniforms) {
-                mesh.material.uniforms.time.value += 0.01;
-                mesh.material.uniforms.mousePos.value.set(
+            if (blobMesh.material.uniforms) {
+                blobMesh.material.uniforms.time.value += 0.01;
+                blobMesh.material.uniforms.mousePos.value.set(
                     (mouseX + windowHalfX) / window.innerWidth,
                     (mouseY + windowHalfY) / window.innerHeight
                 );
             }
+
+            // Animate particles
+            particlesMesh.rotation.x += 0.0005;
+            particlesMesh.rotation.y += 0.0002;
+            particlesMesh.position.y = Math.sin(Date.now() * 0.0001) * 0.5; // Subtle vertical float
 
             renderer.render(scene, camera);
         }
